@@ -1,8 +1,4 @@
 
-# tutaj bzmienic max total tokens na 138
-# a pad sequence to multiple of na 128
-# batch bucket size?
-
 import os
 os.environ["MAX_TOTAL_TOKENS"] = "138"
 os.environ["PAD_SEQUENCE_TO_MULTIPLE_OF"] = "128"
