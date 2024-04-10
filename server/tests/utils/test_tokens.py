@@ -1,4 +1,9 @@
+# Copyright (C) 2024 Habana Labs, Ltd. an Intel Company.
+
+import pytest
 import torch
+from transformers import AutoTokenizer
+
 from text_generation_server.utils.tokens import (
     StopSequenceCriteria,
     StoppingCriteria,
@@ -6,7 +11,15 @@ from text_generation_server.utils.tokens import (
     batch_top_tokens,
     make_tokenizer_optional,
 )
-from transformers import AutoTokenizer
+
+
+@pytest.fixture
+def skip_tokenizer_env_var():
+    import os
+    os.environ["SKIP_TOKENIZER_IN_TGI"] = "true"
+    yield
+    del os.environ['SKIP_TOKENIZER_IN_TGI']
+
 
 def test_stop_sequence_criteria():
     criteria = StopSequenceCriteria("/test;")
@@ -69,8 +82,7 @@ def test_batch_top_tokens():
     assert topn_tok_logprobs[4] == [-1, -2, -3, -3, -4]
 
 
-
-def test_pass_through_tokenizer():
+def test_pass_through_tokenizer(skip_tokenizer_env_var):
     tokenizer = AutoTokenizer.from_pretrained(
             'meta-llama/Llama-2-7b-chat-hf',
             revision=None,
