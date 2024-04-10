@@ -18,3 +18,6 @@ def default_pb_parameters():
 @pytest.fixture
 def default_pb_stop_parameters():
     return generate_pb2.StoppingCriteriaParameters(stop_sequences=[], max_new_tokens=10)
+
+from text_generation_server.utils.speculate import set_speculate
+set_speculate(0)
