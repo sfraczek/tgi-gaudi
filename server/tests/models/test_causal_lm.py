@@ -26,7 +26,7 @@ def default_pb_request(default_pb_parameters, default_pb_stop_parameters):
         id=0,
         inputs="Test",
         prefill_logprobs=True,
-        truncate=128,
+        truncate=PAD_SEQUENCE_TO_MULTIPLE_OF,
         parameters=default_pb_parameters,
         stopping_parameters=default_pb_stop_parameters,
     )
