@@ -100,8 +100,7 @@ def test_causal_lm_batch_type(default_causal_lm):
 def test_causal_lm_generate_token(default_causal_lm, default_causal_lm_batch):
     sequence_length = len(default_causal_lm_batch.requests[0].all_input_ids)
     generations, next_batch = default_causal_lm.generate_token([default_causal_lm_batch])
-    # po pierwszym generate token ostatni jest padding i na -2 ma byc 14402
-    #
+
     assert isinstance(next_batch, CausalLMBatch)
     assert len(next_batch.attention_mask[0]) == PAD_SEQUENCE_TO_MULTIPLE_OF
     assert next_batch.requests[0].all_input_ids[-12] == 14402
