@@ -5,7 +5,7 @@ from copy import copy
 from transformers import AutoTokenizer
 
 from text_generation_server.pb import generate_pb2
-from text_generation_server.models.causal_lm import CausalLM, CausalLMBatch
+from text_generation_server.models.causal_lm import CausalLM, CausalLMBatch, PAD_SEQUENCE_TO_MULTIPLE_OF
 
 
 @pytest.fixture(scope="session")
@@ -26,7 +26,7 @@ def default_pb_request(default_pb_parameters, default_pb_stop_parameters):
         id=0,
         inputs="Test",
         prefill_logprobs=True,
-        truncate=100,
+        truncate=128,
         parameters=default_pb_parameters,
         stopping_parameters=default_pb_stop_parameters,
     )
@@ -40,7 +40,7 @@ def default_pb_batch(default_pb_request):
 @pytest.fixture
 def default_causal_lm_batch(default_pb_batch, gpt2_tokenizer):
     return CausalLMBatch.from_pb(
-        default_pb_batch, gpt2_tokenizer, torch.float32, torch.device("cpu")
+        default_pb_batch, gpt2_tokenizer, torch.float32, torch.device("hpu")
     )
 
 
@@ -54,7 +54,7 @@ def default_multi_requests_causal_lm_batch(default_pb_request, gpt2_tokenizer):
 
     batch_pb = generate_pb2.Batch(id=1, requests=[req_0, req_1], size=2)
     return CausalLMBatch.from_pb(
-        batch_pb, gpt2_tokenizer, torch.float32, torch.device("cpu")
+        batch_pb, gpt2_tokenizer, torch.float32, torch.device("hpu")
     )
 
 
@@ -98,37 +98,38 @@ def test_causal_lm_batch_type(default_causal_lm):
 
 
 def test_causal_lm_generate_token(default_causal_lm, default_causal_lm_batch):
-    sequence_length = len(default_causal_lm_batch.all_input_ids[0])
-    generations, next_batch = default_causal_lm.generate_token(default_causal_lm_batch)
-
-    assert len(generations) == len(next_batch)
+    sequence_length = len(default_causal_lm_batch.requests[0].all_input_ids)
+    generations, next_batch = default_causal_lm.generate_token([default_causal_lm_batch])
+    # po pierwszym generate token ostatni jest padding i na -2 ma byc 14402
+    #
     assert isinstance(next_batch, CausalLMBatch)
+    assert len(next_batch.attention_mask[0]) == PAD_SEQUENCE_TO_MULTIPLE_OF
+    assert next_batch.requests[0].all_input_ids[-12] == 14402
+    assert torch.all(next_batch.requests[0].all_input_ids[-11:] == 50256)
+    assert torch.all(next_batch.requests[0].all_input_ids[:-12] == 50256)
+    
+    generations, next_batch = default_causal_lm.generate_token([default_causal_lm_batch])
+    assert torch.all(next_batch.attention_mask[0][126:128] == 1)
+    assert torch.all(next_batch.attention_mask[0][:126] == 0)
+    assert torch.all(next_batch.attention_mask[0][129:] == 0)
 
-    assert len(next_batch.all_input_ids) == len(next_batch)
-    assert len(next_batch.all_input_ids[0]) == sequence_length + 1
-    assert len(next_batch.attention_mask[0]) == 11
-    assert next_batch.all_input_ids[0][-1] == 13
-    assert next_batch.all_input_ids[0][-2] == 14402
-    assert torch.all(next_batch.all_input_ids[0][:-2] == 50256)
+    assert next_batch.requests[0].all_input_ids[-12] == 14402
+    assert next_batch.requests[0].all_input_ids[-11] == 13
+    assert torch.all(next_batch.requests[0].all_input_ids[-10:] == 50256)
+    assert torch.all(next_batch.requests[0].all_input_ids[:-12] == 50256)
 
-    assert torch.all(next_batch.attention_mask[0][0:2] == 1)
-    assert torch.all(next_batch.attention_mask[0][2:] == 0)
-
-    assert next_batch.input_ids.shape == (len(next_batch), 1)
-    assert next_batch.input_ids[0, 0] == 13
-
-    assert next_batch.input_lengths == [2]
-    assert next_batch.max_input_length == next_batch.input_lengths[0]
+    assert next_batch.input_length == PAD_SEQUENCE_TO_MULTIPLE_OF
+    assert next_batch.max_input_length == next_batch.input_length
 
     assert next_batch.past_key_values is not None
     assert all(
-        [p[0].shape == (1, 12, sequence_length, 64) for p in next_batch.past_key_values]
+        [p[0].shape == (4, 12, sequence_length, 64) for p in next_batch.past_key_values]
     )
     assert all(
-        [p[1].shape == (1, 12, sequence_length, 64) for p in next_batch.past_key_values]
+        [p[1].shape == (4, 12, sequence_length, 64) for p in next_batch.past_key_values]
     )
     assert all([generation.generated_text is None for generation in generations])
-    assert all([len(generation.prefill_tokens) == 1 for generation in generations])
+    assert all([len(generation.prefill_tokens) == 127 for generation in generations])
     assert all([generation.token_id.item() == 13 for generation in generations])
     assert all([generation.token_text == "." for generation in generations])
     assert generations[0].request_id == 0

@@ -1,3 +1,13 @@
+
+# tutaj bzmienic max total tokens na 138
+# a pad sequence to multiple of na 128
+# batch bucket size?
+
+import os
+os.environ["MAX_TOTAL_TOKENS"] = "138"
+os.environ["PAD_SEQUENCE_TO_MULTIPLE_OF"] = "128"
+os.environ["BATCH_BUCKET_SIZE"] = "1"
+
 import pytest
 
 from text_generation_server.pb import generate_pb2
