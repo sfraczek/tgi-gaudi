@@ -16,11 +16,14 @@ from text_generation_server.models.causal_lm import (
     BATCH_BUCKET_SIZE,
 )
 
+PAD_TOKEN=0
+
+
 @pytest.fixture(scope="session")
 def default_causal_lm():
     return CausalLM("meta-llama/Llama-2-7b-hf")
 
-PAD_TOKEN=0
+
 @pytest.fixture(scope="session")
 def default_tokenizer(default_causal_lm):
     default_causal_lm.tokenizer.pad_token_id = PAD_TOKEN
@@ -77,19 +80,20 @@ def test_batch_from_pb(default_pb_batch, default_causal_lm_batch):
     # For Gaudi we are adding padding of multiplication of bucket size
     size_of_padded_to_bucket = ((default_pb_batch.size + PREFILL_BATCH_BUCKET_SIZE - 1) // PREFILL_BATCH_BUCKET_SIZE) * PREFILL_BATCH_BUCKET_SIZE
 
-    assert len(batch.input_ids) == size_of_padded_to_bucket 
+    assert len(batch.input_ids) == size_of_padded_to_bucket
 
     assert batch.input_ids[0][-2] == 4321
     assert batch.input_ids[0][-3] == 1
     assert torch.all(batch.input_ids[0][:-3] == PAD_TOKEN)
     assert batch.input_ids[0][-1] == PAD_TOKEN
 
+    assert batch.attention_mask[0][-1] == 0
     assert batch.attention_mask[0, -2] == 1
     assert batch.attention_mask[0, -3] == 1
     assert torch.all(batch.attention_mask[0, :-3] == 0)
 
     assert batch.past_key_values is None
-    assert all(   
+    assert all(
         [
             torch.equal(input_ids, request.all_input_ids[:batch.input_length + 1, 0])
             for input_ids, request in zip(batch.input_ids, batch.requests)
@@ -122,7 +126,7 @@ def test_causal_lm_generate_token(default_causal_lm, default_causal_lm_batch):
 
     assert torch.all(next_batch.requests[0].all_input_ids[-padding-1:] == PAD_TOKEN)
     assert torch.all(next_batch.requests[0].all_input_ids[:-padding-3] == PAD_TOKEN)
-    
+
     generations, next_batch, _ = default_causal_lm.generate_token([default_causal_lm_batch])
     assert torch.all(next_batch.attention_mask[0][PAD_SEQUENCE_TO_MULTIPLE_OF-3:PAD_SEQUENCE_TO_MULTIPLE_OF] == 1)
     assert torch.all(next_batch.attention_mask[0][:PAD_SEQUENCE_TO_MULTIPLE_OF-3] == 0)
@@ -268,7 +272,7 @@ def test_batch_concatenate(
         next_batch.attention_mask[2, :-next_batch.right_padding-4] == 0)
     assert torch.all(
         next_batch.attention_mask[3, :-next_batch.right_padding-3] == 0)
-    
+
     assert next_batch.batch_id == 0
     assert next_batch.input_ids[0,-next_batch.right_padding - 3] == 1
     assert next_batch.input_ids[0,-next_batch.right_padding - 2] == 4321
@@ -292,13 +296,13 @@ def test_batch_concatenate(
     assert next_batch.requests[2].stopping_criteria == next_batch_1.requests[1].stopping_criteria
 
     assert next_batch.past_key_values is not None
-      
+
     assert all([p[0].shape == (8, 32, 2048, 128) for p in next_batch.past_key_values])
     assert all([p[1].shape == (8, 32, 2048, 128) for p in next_batch.past_key_values])
 
     assert next_batch.past_key_values is not None
 
-    for i, past in enumerate(next_batch.past_key_values):       
+    for i, past in enumerate(next_batch.past_key_values):
         assert torch.equal(next_batch_0_past_key_values[i][0][0, 0,0:128], past[0][0][0][1:129])
         assert torch.equal(
             next_batch_1_past_key_values[i][0][:, :, 0:1][0], past[0][1:, :, 1 :2, :][0]
