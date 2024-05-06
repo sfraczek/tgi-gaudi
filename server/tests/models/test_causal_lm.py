@@ -7,8 +7,8 @@ from copy import copy
 from transformers import AutoTokenizer
 
 from text_generation_server.pb import generate_pb2
+from text_generation_server.models import get_model
 from text_generation_server.models.causal_lm import (
-    CausalLM,
     CausalLMBatch,
     PREFILL_BATCH_BUCKET_SIZE,
     PAD_SEQUENCE_TO_MULTIPLE_OF,
@@ -21,7 +21,7 @@ PAD_TOKEN=0
 
 @pytest.fixture(scope="session")
 def default_causal_lm():
-    return CausalLM("meta-llama/Llama-2-7b-hf")
+    return get_model("meta-llama/Llama-2-7b-hf", None, None, None, None)
 
 
 @pytest.fixture(scope="session")
